@@ -25,6 +25,7 @@ public class User {
     @Enumerated(value = EnumType.STRING)
     private UserType userType;
     private String name;
+    @Column(unique = true)
     private String identifier;
     private String password;
     @Column(length = 255)

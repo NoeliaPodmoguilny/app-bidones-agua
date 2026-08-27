@@ -12,6 +12,7 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import javax.naming.directory.InvalidAttributeValueException;
 import java.util.List;
 
 @Service
@@ -22,6 +23,10 @@ public class AdminService {
     private final PasswordEncoder passwordEncoder;
 
     public UserResponseDTO registerAdmin(@Valid UserRequestDTO userRequest) {
+        // Verificar si ya existe el usuario en la BD
+        if (userRepository.existsByIdentifier(userRequest.getIdentifier())) {
+            throw new RuntimeException("Ya existe un usuario registrado con ese identificador.");
+        }
         User newUser = new User();
         newUser.setName(userRequest.getName());
         newUser.setUserType(UserType.ADMIN);

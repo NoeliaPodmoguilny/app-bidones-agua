@@ -167,7 +167,7 @@ public class OrderService {
 
 
     public List<OrderResponseDTO> getOrdersReport(String authIdentifier, OrderFilterDTO orderFilterDTO){
-        return orderRepository.findAll(OrderSpecification.withFilters(orderFilterDTO))
+        return orderRepository.findAll(OrderSpecification.withFilters(authIdentifier, orderFilterDTO))
                 .stream()
                 .map(this::toResponseDTO)
                 .toList();
