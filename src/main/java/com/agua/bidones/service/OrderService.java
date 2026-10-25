@@ -1,5 +1,6 @@
 package com.agua.bidones.service;
 
+import com.agua.bidones.dto.AdminSummaryDTO;
 import com.agua.bidones.dto.*;
 import com.agua.bidones.enums.Status;
 import com.agua.bidones.enums.UserType;
@@ -19,7 +20,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.time.ZoneId;
 import java.util.List;
 
@@ -30,14 +34,31 @@ public class OrderService {
     private final IOrderRepository orderRepository;
     private final IUserRepository userRepository;
     private final NotificationService notificationService;
+    private final com.agua.bidones.repository.INotificationRepository notificationRepository;
 
 
+    private static final List<Status> OPEN_STATUSES = List.of(Status.PENDIENTE, Status.EN_CAMINO);
+    private static final int DEFAULT_DAYS = 30;
+
+    private static Instant sinceDays(int days) {
+        return LocalDate.now(OrderSpecification.ZONE).minusDays(days).atStartOfDay(OrderSpecification.ZONE).toInstant();
+    }
+
+    @Transactional(readOnly = true)
     public List<OrderResponseDTO> getOrdersByUserIdentifier(String identifier) {
+        return getOrdersByUserIdentifier(identifier, DEFAULT_DAYS);
+    }
+
+    @Transactional(readOnly = true)
+    public List<OrderResponseDTO> getOrdersByUserIdentifier(String identifier, int days) {
         User cliente = userRepository.findUserByIdentifier(identifier);
         if(cliente==null){
             throw new RuntimeException("Usuario no encontrado");
         }
-        return orderRepository.findByClienteOrderByCreatedAtDesc(cliente)
+        List<Order> orders = days > 0
+                ? orderRepository.findRecentByCliente(cliente, sinceDays(days), OPEN_STATUSES)
+                : orderRepository.findByClienteOrderByCreatedAtDesc(cliente);
+        return orders
                 .stream()
                 .map(this::toResponseDTO)
                 .toList();
@@ -51,7 +72,7 @@ public class OrderService {
                 order.getRejectionReason(),
                 order.getCreatedAt(),
                 order.getCliente().getName(),
-                order.getRepartidor().getName()
+                order.getRepartidor() != null ? order.getRepartidor().getName() : null
         );
     }
 
@@ -77,8 +98,16 @@ public class OrderService {
 
     @Transactional(readOnly = true)
     public List<RepartidorOrderResponseDTO> getOrdersForRepartidor(String repartidorIdentifier) {
+        return getOrdersForRepartidor(repartidorIdentifier, DEFAULT_DAYS);
+    }
+
+    @Transactional(readOnly = true)
+    public List<RepartidorOrderResponseDTO> getOrdersForRepartidor(String repartidorIdentifier, int days) {
         User repartidor = getAuthenticatedRepartidor(repartidorIdentifier);
-        return orderRepository.findByRepartidorOrderByCreatedAtDesc(repartidor)
+        List<Order> orders = days > 0
+                ? orderRepository.findRecentByRepartidor(repartidor, sinceDays(days), OPEN_STATUSES)
+                : orderRepository.findByRepartidorOrderByCreatedAtDesc(repartidor);
+        return orders
                 .stream()
                 .map(this::toRepartidorOrderResponseDTO)
                 .toList();
@@ -97,6 +126,25 @@ public class OrderService {
         );
     }
 
+    // el pedido esta en camino
+    @Transactional
+    public OrderResponseDTO onTheWayOrderByRepartidor(String repartidorIdentifier, Long orderId) {
+        User repartidor = getAuthenticatedRepartidor(repartidorIdentifier);
+
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new EntityNotFoundException("Pedido no encontrado"));
+
+        validateOrderBelongsToRepartidor(order, repartidor);
+        if (order.getStatus() != Status.PENDIENTE) {
+            throw new IllegalStateException("Solo se pueden enviar pedidos pendientes de entrega");
+        }
+        order.setStatus(Status.EN_CAMINO);
+        order.setRejectionReason(null);
+        notificationService.createOrderOnTheWayNotification(order);
+        return toResponseDTO(order);
+    }
+
+    // pedido entregado
     @Transactional
     public OrderResponseDTO deliverOrderByRepartidor(String repartidorIdentifier, Long orderId) {
         User repartidor = getAuthenticatedRepartidor(repartidorIdentifier);
@@ -105,8 +153,8 @@ public class OrderService {
                 .orElseThrow(() -> new EntityNotFoundException("Pedido no encontrado"));
 
         validateOrderBelongsToRepartidor(order, repartidor);
-        if (order.getStatus() != Status.PENDIENTE) {
-            throw new IllegalStateException("Solo se pueden entregar pedidos pendientes");
+        if (order.getStatus() != Status.EN_CAMINO) {
+            throw new IllegalStateException("Solo se pueden entregar pedidos en camino");
         }
         order.setStatus(Status.ENTREGADO);
         order.setRejectionReason(null);
@@ -132,6 +180,7 @@ public class OrderService {
         }
     }
 
+    //pedido rechazado
     @Transactional
     public OrderResponseDTO rejectOrderByRepartidor(
             String repartidorIdentifier,
@@ -145,8 +194,8 @@ public class OrderService {
 
         validateOrderBelongsToRepartidor(order, repartidor);
 
-        if (order.getStatus() != Status.PENDIENTE) {
-            throw new IllegalStateException("Solo se pueden rechazar pedidos pendientes");
+        if (order.getStatus() != Status.PENDIENTE && order.getStatus() != Status.EN_CAMINO) {
+            throw new IllegalStateException("Solo se pueden rechazar pedidos pendientes o en camino");
         }
 
         order.setStatus(Status.RECHAZADO);
@@ -157,21 +206,51 @@ public class OrderService {
         return toResponseDTO(order);
     }
 
-    public void deleteOrder(Long id) {
+    @Transactional
+    public void deleteOrder(String identifier, Long id) {
         Order pedido = orderRepository.findById(id).orElseThrow(() -> new EntityNotFoundException("Pedido no encontrado"));
-        if(pedido.getStatus()!= Status.PENDIENTE){
-            throw new RuntimeException("No se puede eliminar el pedido porque ya fue procesado");
+        if (pedido.getCliente() == null || !pedido.getCliente().getIdentifier().equals(identifier)) {
+            throw new org.springframework.security.access.AccessDeniedException("Este pedido no es tuyo");
         }
+        if(pedido.getStatus()!= Status.PENDIENTE){
+            throw new IllegalStateException("No se puede eliminar el pedido porque ya fue procesado");
+        }
+        // la notificación "Nuevo pedido" del repartidor apunta al pedido: se borra primero
+        notificationRepository.deleteByOrder(pedido);
         orderRepository.delete(pedido);
     }
 
 
+    @Transactional(readOnly = true)
     public List<OrderResponseDTO> getOrdersReport(String authIdentifier, OrderFilterDTO orderFilterDTO){
+        if (orderFilterDTO.getDateFrom() == null && orderFilterDTO.getDateTo() == null
+                && orderFilterDTO.getStatus() == null
+                && (orderFilterDTO.getClienteName() == null || orderFilterDTO.getClienteName().isBlank())
+                && (orderFilterDTO.getRepartidorName() == null || orderFilterDTO.getRepartidorName().isBlank())) {
+            orderFilterDTO.setDateFrom(LocalDate.now(OrderSpecification.ZONE).minusDays(DEFAULT_DAYS));
+        }
         return orderRepository.findAll(OrderSpecification.withFilters(authIdentifier, orderFilterDTO))
                 .stream()
                 .map(this::toResponseDTO)
                 .toList();
     }
 
-}
 
+    @Transactional(readOnly = true)
+    public AdminSummaryDTO getAdminSummary(String adminIdentifier) {
+        LocalDate today = LocalDate.now(OrderSpecification.ZONE);
+        Instant start = today.atStartOfDay(OrderSpecification.ZONE).toInstant();
+        Instant end = today.plusDays(1).atStartOfDay(OrderSpecification.ZONE).toInstant();
+
+        Map<String, Long> counts = new LinkedHashMap<>();
+        for (Status status : Status.values()) {
+            counts.put(status.name(), 0L);
+        }
+        for (Object[] row : orderRepository.countByStatusBetween(adminIdentifier, start, end)) {
+            counts.put(((Status) row[0]).name(), ((Number) row[1]).longValue());
+        }
+        long total = counts.values().stream().mapToLong(Long::longValue).sum();
+        long carryOver = orderRepository.countOpenBefore(adminIdentifier, start, OPEN_STATUSES);
+        return new AdminSummaryDTO(counts, total, carryOver);
+    }
+}

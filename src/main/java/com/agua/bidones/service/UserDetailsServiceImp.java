@@ -35,25 +35,24 @@ public class UserDetailsServiceImp implements UserDetailsService {
         return User.builder()
                 .username(usuario.getIdentifier())
                 .password(usuario.getPassword())
+                .disabled(!usuario.isAccountActive())
                 .build();
     }
 
     public AuthResponseDTO loginUser(AuthLoginRequestDTO authLoginRequest) {
 
-        //recuperamos identifier y password
         String identifier = authLoginRequest.identifier();
         String password = authLoginRequest.password();
         Authentication authentication = this.authenticate(identifier, password);
 
-        //si está ok, obtenemos el SecurityContext y creamos el token
         SecurityContextHolder.getContext().setAuthentication(authentication);
-        String accessToken = jwtUtils.createToken(authentication);
-        //Buscar el user
         com.agua.bidones.model.User usermodel = userRepo.findUserByIdentifier(identifier);
         if(usermodel==null){
             throw new UsernameNotFoundException("Usuario no encontrado");
         }
+        String accessToken = jwtUtils.createToken(authentication, usermodel.getUserType().name());
         UserResponseDTO userDTO = new UserResponseDTO(
+                usermodel.getId(),
                 usermodel.getUserType(),
                 usermodel.getName(),
                 usermodel.getIdentifier()
@@ -64,15 +63,17 @@ public class UserDetailsServiceImp implements UserDetailsService {
     }
 
     public Authentication authenticate(String identifier, String password) {
-        //buscamos el usuario
         UserDetails userDetails = this.loadUserByUsername(identifier);
 
         if (userDetails == null) {
             throw new BadCredentialsException("Contraseña y/o usuario incorrectos");
         }
-        // manejo de error, si la password no es igual
         if (!passwordEncoder.matches(password, userDetails.getPassword())) {
             throw new BadCredentialsException("Contraseña y/o usuario incorrectos");
+        }
+        if (!userDetails.isEnabled()) {
+            throw new org.springframework.security.authentication.DisabledException(
+                    "Tu cuenta fue dada de baja. Consultá con el administrador.");
         }
         return new UsernamePasswordAuthenticationToken(
                 identifier,

@@ -40,12 +40,13 @@ public class RepartidorController {
     @Operation(summary = "Ver mis pedidos", description = "Ver pedidos del repartidor")
     @GetMapping("/orders")
     public ResponseEntity<List<RepartidorOrderResponseDTO>> getMyOrders(
-            Authentication authentication
+            Authentication authentication,
+            @RequestParam(name = "days", defaultValue = "30") int days
     ) {
         String repartidorIdentifier = authentication.getName();
 
         List<RepartidorOrderResponseDTO> response =
-                orderService.getOrdersForRepartidor(repartidorIdentifier);
+                orderService.getOrdersForRepartidor(repartidorIdentifier, days);
 
         return ResponseEntity.ok(response);
     }
@@ -71,4 +72,26 @@ public class RepartidorController {
                 orderService.rejectOrderByRepartidor(repartidorIdentifier, id, request);
         return ResponseEntity.ok(response);
     }
+
+    @Operation(summary = "Pedido en camino", description = "Permite al repartidor notificar que esta en camino")
+    @PatchMapping("/orders/{id}/on-the-way")
+    public ResponseEntity<OrderResponseDTO> onTheWayOrder(Authentication authentication, @PathVariable Long id) {
+        String repartidorIdentifier = authentication.getName();
+        OrderResponseDTO response =
+                orderService.onTheWayOrderByRepartidor(repartidorIdentifier, id);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/clientes")
+    public ResponseEntity<List<UserResponseDTO>> myClientes(Authentication auth) {
+        return ResponseEntity.ok(userService.getClientesOfRepartidor(auth.getName()));
+    }
+
+    @PatchMapping("/clientes/{id}/password")
+    public ResponseEntity<Void> resetClientPassword(Authentication auth, @PathVariable Long id,
+                                                    @Valid @RequestBody ResetPasswordRequestDTO request) {
+        userService.resetClientPasswordByRepartidor(auth.getName(), id, request.newPassword());
+        return ResponseEntity.noContent().build();
+    }
+
 }

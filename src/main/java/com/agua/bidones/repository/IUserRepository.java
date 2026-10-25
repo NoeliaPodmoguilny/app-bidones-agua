@@ -14,18 +14,20 @@ import java.util.Optional;
 @Repository
 public interface IUserRepository extends JpaRepository<User, Long> {
 
-    @Query("SELECT u FROM User u WHERE u.userType = :userType AND u.admin.identifier = :adminIdentifier")
+    @Query("SELECT u FROM User u WHERE u.userType = :userType AND u.admin.identifier = :adminIdentifier AND (u.active IS NULL OR u.active = true)")
     List<User> findRepartidoresByAdminIdentifier(@Param("userType") UserType userType, @Param("adminIdentifier") String adminIdentifier);
 
-    // Clientes indirectos: Clientes cuyo repartidor pertenezca al Admin
     @Query("SELECT c FROM User c WHERE c.userType = :userType AND c.repartidor.admin.identifier = :adminIdentifier")
     List<User> findClientesByAdminIdentifier(@Param("userType") UserType userType, @Param("adminIdentifier") String adminIdentifier);
+
+    @Query("SELECT u FROM User u WHERE u.userType = :userType AND u.admin.identifier = :adminIdentifier AND u.active = false")
+    List<User> findInactiveRepartidoresByAdminIdentifier(@Param("userType") UserType userType, @Param("adminIdentifier") String adminIdentifier);
 
     User findUserByIdentifier(String identifier);
 
     boolean existsByIdentifier(String identifier);
 
-    // buscar quién tiene el token
     List<User> findByPushToken(String pushToken);
 
+    List<User> findByRepartidorAndUserTypeOrderByNameAsc(User repartidor, UserType userType);
 }

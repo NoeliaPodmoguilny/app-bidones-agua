@@ -2,17 +2,27 @@ package com.agua.bidones.service;
 
 import com.agua.bidones.dto.OrderFilterDTO;
 import com.agua.bidones.model.Order;
+import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.jpa.domain.Specification;
 
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 
 public class OrderSpecification {
 
+    public static final ZoneId ZONE = ZoneId.of("America/Argentina/Buenos_Aires");
+
     public static Specification<Order> withFilters(String authIdentifier, OrderFilterDTO filter) {
 
         return (root, query, cb) -> {
+
+            Class<?> resultType = query.getResultType();
+            if (resultType != Long.class && resultType != long.class) {
+                root.fetch("cliente", JoinType.LEFT);
+                root.fetch("repartidor", JoinType.LEFT);
+            }
 
             List<Predicate> predicates = new ArrayList<>();
 
@@ -24,7 +34,6 @@ public class OrderSpecification {
                         )
                 );
             }
-            // 2. FILTROS EXISTENTES
             if (filter.getStatus() != null) {
                 predicates.add(
                         cb.equal(root.get("status"), filter.getStatus())
@@ -54,17 +63,17 @@ public class OrderSpecification {
             if (filter.getDateFrom() != null) {
                 predicates.add(
                         cb.greaterThanOrEqualTo(
-                                root.get("createdAt"),
-                                filter.getDateFrom().atStartOfDay()
+                                root.<java.time.Instant>get("createdAt"),
+                                filter.getDateFrom().atStartOfDay(ZONE).toInstant()
                         )
                 );
             }
 
             if (filter.getDateTo() != null) {
                 predicates.add(
-                        cb.lessThanOrEqualTo(
-                                root.get("createdAt"),
-                                filter.getDateTo().atTime(23,59,59)
+                        cb.lessThan(
+                                root.<java.time.Instant>get("createdAt"),
+                                filter.getDateTo().plusDays(1).atStartOfDay(ZONE).toInstant()
                         )
                 );
             }

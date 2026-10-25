@@ -52,7 +52,28 @@ public class NotificationService {
         notification.setUser(cliente);
         notification.setOrder(order);
         notification.setNotificationType(NotificationType.ORDEN_ENTREGADA);
-        notification.setTitle("Pedido aceptado");
+        notification.setTitle("Pedido entregado");
+        notification.setMessage("Tu pedido fue entregado correctamente.");
+        notification.setRead(false);
+
+        notificationRepository.save(notification);
+
+        pushNotificationService.sendToUser(
+                cliente,
+                "Pedido entregado",
+                "Tu pedido fue entregado correctamente."
+        );
+    }
+
+    @Transactional
+    public void createOrderOnTheWayNotification(Order order) {
+        User cliente = order.getCliente();
+
+        Notification notification = new Notification();
+        notification.setUser(cliente);
+        notification.setOrder(order);
+        notification.setNotificationType(NotificationType.ORDEN_EN_CAMINO);
+        notification.setTitle("Pedido en camino");
         notification.setMessage("Tu pedido fue aceptado y está en camino.");
         notification.setRead(false);
 
@@ -60,7 +81,7 @@ public class NotificationService {
 
         pushNotificationService.sendToUser(
                 cliente,
-                "Pedido aceptado",
+                "Pedido en camino",
                 "Tu pedido fue aceptado y está en camino."
         );
     }
@@ -89,10 +110,15 @@ public class NotificationService {
     public List<NotificationResponseDTO> getNotificationsForUser(String identifier) {
         User user = getUserByIdentifier(identifier);
 
-        return notificationRepository.findByUserOrderByCreatedAtDesc(user)
+        return notificationRepository.findTop100ByUserOrderByCreatedAtDesc(user)
                 .stream()
                 .map(this::toResponseDTO)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public long countUnread(String identifier) {
+        return notificationRepository.countByUserAndReadFalse(getUserByIdentifier(identifier));
     }
 
     @Transactional

@@ -11,9 +11,15 @@ import java.util.Optional;
 @Repository
 public interface INotificationRepository extends JpaRepository<Notification, Long> {
 
-    List<Notification> findByUserOrderByCreatedAtDesc(User user);
-
     Optional<Notification> findByIdAndUser(Long id, User user);
 
     List<Notification> findByUserAndReadFalse(User user);
+
+    List<Notification> findTop100ByUserOrderByCreatedAtDesc(User user);
+
+    long countByUserAndReadFalse(User user);
+
+    void deleteByUser(User user);
+
+    void deleteByOrder(com.agua.bidones.model.Order order);
 }

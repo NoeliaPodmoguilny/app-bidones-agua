@@ -25,12 +25,14 @@ public class OrderController {
 
     @Operation(summary = "Ver mis pedidos", description = "Ver pedidos del cliente")
     @GetMapping("/me")
-    public ResponseEntity<List<OrderResponseDTO>> getMyOrders(Authentication authentication) {
+    public ResponseEntity<List<OrderResponseDTO>> getMyOrders(
+            Authentication authentication,
+            @RequestParam(name = "days", defaultValue = "30") int days) {
         if(authentication==null){
             throw new RuntimeException("Authentication is null");
         }
         String identifier = authentication.getName();
-        List<OrderResponseDTO> orders = orderService.getOrdersByUserIdentifier(identifier);
+        List<OrderResponseDTO> orders = orderService.getOrdersByUserIdentifier(identifier, days);
         return ResponseEntity.ok(orders);
     }
     @Operation(summary = "Crear nuevo pedido", description = "Crear nuevo pedido como cliente")
@@ -47,8 +49,8 @@ public class OrderController {
 
     @Operation(summary = "Eliminar pedido", description = "Elimina/cancela un pedido del cliente logueado, sólo si está pendiente")
     @DeleteMapping("/{id}")
-    public ResponseEntity<String> deleteOrder(@PathVariable Long id){
-        orderService.deleteOrder(id);
+    public ResponseEntity<String> deleteOrder(Authentication authentication, @PathVariable Long id){
+        orderService.deleteOrder(authentication.getName(), id);
         return ResponseEntity.status(HttpStatus.OK).body("Pedido eliminado");
     }
 }

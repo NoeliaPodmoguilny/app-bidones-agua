@@ -22,10 +22,13 @@ public class JwtUtils {
     private String userGenerator;
 
     public String createToken(Authentication authentication) {
+        return createToken(authentication, null);
+    }
+
+    public String createToken(Authentication authentication, String role) {
         Algorithm algorithm = Algorithm.HMAC256(this.privateKey);
         String username = authentication.getPrincipal().toString();
 
-        //generamos el token
         String jwtToken = JWT.create()
                 .withIssuer(this.userGenerator)
                 .withSubject(username)
@@ -33,11 +36,11 @@ public class JwtUtils {
                 .withExpiresAt(new Date(System.currentTimeMillis() + 28800000))
                 .withJWTId(UUID.randomUUID().toString())
                 .withNotBefore(new Date(System.currentTimeMillis()))
+                .withClaim("role", role)
                 .sign(algorithm);
         return jwtToken;
     }
 
-    //funcion para decodificar token
     public DecodedJWT validateToken(String token) {
         try {
             Algorithm algorithm = Algorithm.HMAC256(this.privateKey);
@@ -51,17 +54,14 @@ public class JwtUtils {
         }
     }
 
-    //Metodo para obtener username
     public String extractUsername(DecodedJWT decodedJWT) {
         return decodedJWT.getSubject().toString();
     }
 
-    //devuelvo un claim en particular
     public Claim getSpecificClaim(DecodedJWT decodedJWT, String claimName) {
         return decodedJWT.getClaim(claimName);
     }
 
-    //devuelvo todos los claims
     public Map<String, Claim> returnAllClaims(DecodedJWT decodedJWT) {
         return decodedJWT.getClaims();
     }

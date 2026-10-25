@@ -16,7 +16,10 @@ import java.time.Instant;
 @Getter
 @Setter
 @Entity
-@Table(name = "users")
+@Table(name = "users", indexes = {
+        @Index(name = "idx_users_repartidor", columnList = "repartidor_id"),
+        @Index(name = "idx_users_admin", columnList = "admin_id")
+})
 public class User {
 
     @Id
@@ -33,12 +36,16 @@ public class User {
     @CreationTimestamp
     private Instant createdAt;
 
-    //Si es cliente debe tener asociado un repartidor
+    private Boolean active;
+
+    public boolean isAccountActive() {
+        return active == null || active;
+    }
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "repartidor_id")
     private User repartidor;
 
-    // el repartidor tiene asociado el admin
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "admin_id")
     private User admin;

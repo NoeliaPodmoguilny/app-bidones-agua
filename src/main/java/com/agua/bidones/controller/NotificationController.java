@@ -29,6 +29,12 @@ public class NotificationController {
         );
     }
 
+    @Operation(summary = "Cantidad de notificaciones sin leer", description = "Devuelve solo el número, sin traer la lista")
+    @GetMapping("/unread-count")
+    public ResponseEntity<java.util.Map<String, Long>> unreadCount(Authentication authentication) {
+        return ResponseEntity.ok(java.util.Map.of("count", notificationService.countUnread(authentication.getName())));
+    }
+
     @Operation(summary = "Marcar notificaciones como leidas", description = "Marca como leídas todas las notificaciones del usuario logueado")
     @PatchMapping("/read-all")
     public ResponseEntity<Void> markAllAsRead(Authentication authentication) {

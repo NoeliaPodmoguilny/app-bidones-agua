@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import javax.naming.directory.InvalidAttributeValueException;
 import java.util.List;
 
+
 @Service
 @RequiredArgsConstructor
 public class AdminService {
@@ -22,8 +23,8 @@ public class AdminService {
     private final IUserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
 
+
     public UserResponseDTO registerAdmin(@Valid UserRequestDTO userRequest) {
-        // Verificar si ya existe el usuario en la BD
         if (userRepository.existsByIdentifier(userRequest.getIdentifier())) {
             throw new RuntimeException("Ya existe un usuario registrado con ese identificador.");
         }
@@ -36,6 +37,7 @@ public class AdminService {
         userRepository.save(newUser);
 
         return new UserResponseDTO(
+                newUser.getId(),
                 newUser.getUserType(),
                 newUser.getName(),
                 newUser.getIdentifier());
@@ -55,8 +57,16 @@ public class AdminService {
                 .toList();
     }
 
+    public List<UserReportResponseDTO> getInactiveRepartidoresReport(String adminIdentifier) {
+        return userRepository.findInactiveRepartidoresByAdminIdentifier(UserType.REPARTIDOR, adminIdentifier)
+                .stream()
+                .map(this::toResponseDTO)
+                .toList();
+    }
+
     private UserReportResponseDTO toResponseDTO(User user) {
         return new UserReportResponseDTO(
+                user.getId(),
                 user.getName(),
                 user.getIdentifier()
         );
